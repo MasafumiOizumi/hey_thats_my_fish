@@ -81,11 +81,11 @@ class Game {
         this.maxPlayers = numPlayers;
         this.aiDifficulty = difficulty;
         this.players = [
-            { id: 1, color: 'red', penguins: [], score: 0, name: '赤', isAI: false },
-            { id: 2, color: 'blue', penguins: [], score: 0, name: '青', isAI: false }
+            { id: 1, color: 'red', penguins: [], score: 0, tilesCollected: 0, name: '赤', isAI: false, eliminated: false },
+            { id: 2, color: 'blue', penguins: [], score: 0, tilesCollected: 0, name: '青', isAI: false, eliminated: false }
         ];
-        if (numPlayers >= 3) this.players.push({ id: 3, color: 'green', penguins: [], score: 0, name: '緑', isAI: false });
-        if (numPlayers >= 4) this.players.push({ id: 4, color: 'yellow', penguins: [], score: 0, name: '黄', isAI: false });
+        if (numPlayers >= 3) this.players.push({ id: 3, color: 'green', penguins: [], score: 0, tilesCollected: 0, name: '緑', isAI: false, eliminated: false });
+        if (numPlayers >= 4) this.players.push({ id: 4, color: 'yellow', penguins: [], score: 0, tilesCollected: 0, name: '黄', isAI: false, eliminated: false });
 
         // Assign AI status from the back
         for (let i = 0; i < aiCount; i++) {
@@ -110,13 +110,17 @@ class Game {
 
     checkAITurn() {
         const currentPlayer = this.players[this.currentPlayerIndex];
-        if (currentPlayer.isAI && this.phase !== 'END') {
+        if (currentPlayer.isAI && this.phase !== 'END' && !currentPlayer.eliminated) {
             setTimeout(() => this.makeAIMove(), 800);
         }
     }
 
     makeAIMove() {
         const currentPlayer = this.players[this.currentPlayerIndex];
+        if (currentPlayer.eliminated) {
+            this.nextTurn();
+            return;
+        }
         console.log(`AI ${currentPlayer.name} thinking... Phase: ${this.phase} Difficulty: ${this.aiDifficulty}`);
 
         if (this.phase === 'PLACEMENT') {
@@ -275,7 +279,7 @@ class Game {
 
     handleTileClick(q, r) {
         const currentPlayer = this.players[this.currentPlayerIndex];
-        if (currentPlayer.isAI) return; // Ignore clicks during AI turn
+        if (currentPlayer.isAI || currentPlayer.eliminated) return; // Ignore clicks during AI turn or if eliminated
 
         const tile = this.board.getTile(q, r);
         if (!tile || !tile.active) return;
@@ -327,6 +331,7 @@ class Game {
 
         // 2. Add score to player
         penguin.owner.score += startTile.fishCount;
+        penguin.owner.tilesCollected++;
 
         // 3. Deactivate start tile (it sinks)
         startTile.active = false;
@@ -343,6 +348,32 @@ class Game {
         this.updateUI();
 
         this.checkGameOver();
+    }
+
+    eliminatePlayer(player) {
+        if (player.eliminated) return;
+
+        console.log(`Player ${player.name} eliminated! Collecting remaining penguins.`);
+        player.eliminated = true;
+
+        // Collect all penguins
+        // We need to iterate a copy because we are modifying the array or state
+        const penguins = [...player.penguins];
+        penguins.forEach(p => {
+            if (p.tile && p.tile.active) {
+                // Add score
+                player.score += p.tile.fishCount;
+                player.tilesCollected++;
+
+                // Remove from board
+                p.tile.penguin = null;
+                p.tile.active = false; // Sink the tile
+                p.tile = null;
+            }
+        });
+
+        // Clear penguins list? No, keep them for record, but they are off board.
+        // Actually, render loop checks tile.penguin, so if we removed them from tiles, they are gone visually.
     }
 
     nextTurn() {
@@ -364,25 +395,47 @@ class Game {
             }
         } else {
             // Gameplay phase
-            // Check if next player has any valid moves. If not, skip them.
-            // If no one has moves, game over.
+            // Check if next player has any valid moves.
+            // If not, ELIMINATE them and check the next one.
+            // If ALL players are eliminated, game over.
 
-            let attempts = 0;
+            let activePlayers = this.players.filter(p => !p.eliminated);
+            if (activePlayers.length === 0) {
+                this.phase = 'END';
+                this.checkGameOver();
+                return;
+            }
+
             let nextIndex = this.currentPlayerIndex;
             let foundMovablePlayer = false;
+            let loopCount = 0;
 
-            while (attempts < this.players.length) {
+            // Loop through players to find one who can move
+            while (loopCount < this.players.length) {
                 nextIndex = (nextIndex + 1) % this.players.length;
-                if (this.playerCanMove(this.players[nextIndex])) {
+                const nextPlayer = this.players[nextIndex];
+
+                if (nextPlayer.eliminated) {
+                    loopCount++;
+                    continue;
+                }
+
+                if (this.playerCanMove(nextPlayer)) {
                     this.currentPlayerIndex = nextIndex;
                     foundMovablePlayer = true;
                     break;
+                } else {
+                    // Player cannot move -> Eliminate immediately
+                    this.eliminatePlayer(nextPlayer);
+                    // Don't break, continue looking for next player
                 }
-                attempts++;
+                loopCount++;
             }
 
             if (!foundMovablePlayer) {
                 this.phase = 'END';
+                this.checkGameOver();
+                return;
             }
         }
 
@@ -390,10 +443,12 @@ class Game {
     }
 
     playerCanMove(player) {
+        if (player.eliminated) return false;
         for (let penguin of player.penguins) {
             // Check all 6 directions for at least one valid step
             // Actually isValidMove checks full path, but here we just need to know if ANY neighbor is free
             // Optimization: just check neighbors
+            if (!penguin.tile) continue; // Should not happen if not eliminated
             const neighbors = this.board.getNeighbors(penguin.tile);
             for (let n of neighbors) {
                 if (n.active && !n.penguin) return true;
@@ -414,10 +469,17 @@ class Game {
         modal.classList.remove('hidden');
 
         let html = '<ul>';
-        // Sort by score
-        const sortedPlayers = [...this.players].sort((a, b) => b.score - a.score);
+        // Sort by score, then by tiles collected
+        const sortedPlayers = [...this.players].sort((a, b) => {
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            } else {
+                return b.tilesCollected - a.tilesCollected;
+            }
+        });
+
         sortedPlayers.forEach(p => {
-            html += `<li>${p.name}: ${p.score} 匹</li>`;
+            html += `<li>${p.name}: ${p.score} 匹 (タイル: ${p.tilesCollected}枚)</li>`;
         });
         html += '</ul>';
         scoresDiv.innerHTML = html;
