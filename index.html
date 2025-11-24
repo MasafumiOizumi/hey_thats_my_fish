@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hey, That's My Fish!</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="start-screen">
+            <h1>それはオレの魚だ！</h1>
+            <p>プレイ人数を選んでください</p>
+            <div class="config-form">
+                <div class="form-group">
+                    <label for="total-players">総プレイヤー数:</label>
+                    <select id="total-players">
+                        <option value="2">2人</option>
+                        <option value="3">3人</option>
+                        <option value="4">4人</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ai-count">AIの数:</label>
+                    <select id="ai-count">
+                        <option value="0">0人</option>
+                        <option value="1">1人</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ai-difficulty">AIの強さ:</label>
+                    <select id="ai-difficulty">
+                        <option value="weak">弱い</option>
+                        <option value="strong">強い</option>
+                    </select>
+                </div>
+                <button onclick="startGame()">ゲーム開始</button>
+                <button onclick="showRules()" class="secondary-btn">ルール説明</button>
+            </div>
+        </div>
+        <div id="rules-modal" class="hidden">
+            <div class="modal-content">
+                <h2>ルール説明</h2>
+                <div class="rules-text">
+                    <p><strong>目的:</strong> 氷のタイルに乗っている魚を一番多く集めたプレイヤーが勝ちです。</p>
+                    <p><strong>準備:</strong> 自分の色のペンギンを1匹の魚がいるタイルに配置します。</p>
+                    <p><strong>移動:</strong> 自分の番が来たら、ペンギンを1匹選んで直線上に好きなだけ動かせます。</p>
+                    <ul>
+                        <li>他のペンギンがいる場所や、氷がない場所（海）は飛び越えられません。</li>
+                        <li>移動元のタイルは沈んでしまい、そのタイルの魚を獲得します。</li>
+                    </ul>
+                    <p><strong>終了:</strong> 全員が動けなくなったらゲーム終了です。</p>
+                </div>
+                <button onclick="hideRules()">閉じる</button>
+            </div>
+        </div>
+        <div id="ui-layer" class="hidden">
+            <div id="game-info">
+                <div id="turn-indicator">プレイヤーの番</div>
+                <div id="phase-indicator">準備フェーズ</div>
+            </div>
+            <div id="scoreboard">
+                <!-- Scores will be injected here -->
+            </div>
+        </div>
+        <div id="board-container" class="hidden">
+            <div id="game-board">
+                <!-- Tiles will be generated here -->
+            </div>
+        </div>
+        <div id="controls" class="hidden">
+            <button id="reset-btn">リセット</button>
+        </div>
+        <div id="game-over-modal" class="hidden">
+            <div class="modal-content">
+                <h2>ゲーム終了！</h2>
+                <div id="final-scores"></div>
+                <button id="play-again-btn">もう一度遊ぶ</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
