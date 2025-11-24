@@ -318,9 +318,12 @@ class Game {
         if (this.selectedPenguin && this.selectedPenguin.tile === tile) {
             this.selectedPenguin = null;
         } else {
-            this.selectedPenguin = tile.penguin;
+            if (tile.penguin && tile.penguin.owner === this.players[this.currentPlayerIndex]) {
+                this.selectedPenguin = tile.penguin;
+            }
         }
         this.render();
+        this.updateUI();
     }
 
     movePenguin(penguin, targetTile) {
@@ -494,7 +497,17 @@ class Game {
         turnInd.innerText = `${currentPlayer.name}の番`;
         turnInd.style.color = getComputedStyle(document.documentElement).getPropertyValue(`--p${currentPlayer.id}-color`);
 
-        phaseInd.innerText = this.phase === 'PLACEMENT' ? 'ペンギンを配置してください' : '魚を集めてください！';
+        if (this.phase === 'PLACEMENT') {
+            phaseInd.innerText = 'ペンギンを配置してください';
+        } else if (this.phase === 'GAMEPLAY') {
+            if (this.selectedPenguin) {
+                phaseInd.innerText = 'ペンギンを動かしてください';
+            } else {
+                phaseInd.innerText = '動かすペンギンを選んでください';
+            }
+        } else {
+            phaseInd.innerText = '魚を集めてください！';
+        }
 
         let scoreHtml = '';
         this.players.forEach(p => {
