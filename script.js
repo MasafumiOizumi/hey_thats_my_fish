@@ -1,6 +1,6 @@
-const TILE_SIZE = 50; // Radius
-const HEX_WIDTH = Math.sqrt(3) * TILE_SIZE;
-const HEX_HEIGHT = 2 * TILE_SIZE;
+const TILE_SIZE = 63.5; // Radius (approx for 127px height)
+const HEX_WIDTH = 110;
+const HEX_HEIGHT = 127;
 const X_OFFSET = HEX_WIDTH;
 const Y_OFFSET = HEX_HEIGHT * 0.75;
 
@@ -124,8 +124,6 @@ class Game {
         console.log(`AI ${currentPlayer.name} thinking... Phase: ${this.phase} Difficulty: ${this.aiDifficulty}`);
 
         if (this.phase === 'PLACEMENT') {
-            // Placement is same for both: Random valid tile
-            // Could improve Strong AI to pick tiles with better potential, but random is okay for now
             const validTiles = [];
             this.board.tiles.forEach(tile => {
                 if (tile.active && tile.fishCount === 1 && !tile.penguin) {
@@ -134,6 +132,8 @@ class Game {
             });
 
             if (validTiles.length > 0) {
+                // For Strong AI, maybe pick tiles that are not too close to edge? Or just random.
+                // Random is fine for placement.
                 const target = validTiles[Math.floor(Math.random() * validTiles.length)];
                 this.placePenguin(currentPlayer, target);
             }
@@ -141,54 +141,29 @@ class Game {
             let bestMove = null;
 
             if (this.aiDifficulty === 'strong') {
-                bestMove = this.getBestMoveMinimax(currentPlayer, 2); // Depth 2 (My move, Opponent move)
+                // Iterative Deepening
+                const startTime = Date.now();
+                const timeLimit = 2000; // 2 seconds
+                let depth = 1;
+                let maxDepth = 10; // Safety cap
+
+                // Keep track of best move from previous depth to order moves? (Not implemented yet)
+
+                while (Date.now() - startTime < timeLimit && depth <= maxDepth) {
+                    const move = this.getBestMoveAlphaBeta(currentPlayer, depth, startTime, timeLimit);
+                    if (move) {
+                        bestMove = move;
+                        console.log(`Depth ${depth} complete. Best move score: ${move.score}`);
+                    }
+                    // If we ran out of time inside getBestMoveAlphaBeta, it might return partial result or null.
+                    // We should handle that. For now, getBestMoveAlphaBeta checks time.
+                    if (Date.now() - startTime >= timeLimit) break;
+                    depth++;
+                }
+                console.log(`AI finished thinking at depth ${depth - 1}`);
             } else {
                 // Weak or Normal
-                let maxScore = -Infinity;
-
-                // Iterate all owned penguins
-                for (let penguin of currentPlayer.penguins) {
-                    const moves = this.getValidMoves(penguin);
-
-                    for (let targetTile of moves) {
-                        // Evaluate Move
-                        let currentScore = 0;
-
-                        if (this.aiDifficulty === 'weak') {
-                            // Weak: Just random with slight bias to fish count
-                            currentScore = targetTile.fishCount + Math.random() * 0.5;
-                        } else {
-                            // Normal (formerly Strong): Area Control / Reachable Fish
-                            // 1. Simulate Move
-                            const originalTile = penguin.tile;
-
-                            // Temporarily modify state
-                            originalTile.penguin = null;
-                            originalTile.active = false; // It sinks
-                            targetTile.penguin = penguin;
-                            penguin.tile = targetTile;
-
-                            // 2. Calculate Reachable Fish for AI
-                            const myReachable = this.calculateReachableFish(currentPlayer);
-
-                            currentScore = myReachable + (targetTile.fishCount * 0.1); // Tie breaker
-
-                            // Add randomness
-                            currentScore += Math.random() * 0.5;
-
-                            // 3. Revert State
-                            penguin.tile = originalTile;
-                            targetTile.penguin = null;
-                            originalTile.active = true;
-                            originalTile.penguin = penguin;
-                        }
-
-                        if (currentScore > maxScore) {
-                            maxScore = currentScore;
-                            bestMove = { penguin, target: targetTile };
-                        }
-                    }
-                }
+                bestMove = this.getBestMoveSimple(currentPlayer);
             }
 
             if (bestMove) {
@@ -201,6 +176,182 @@ class Game {
                 this.nextTurn();
             }
         }
+    }
+
+    getBestMoveSimple(player) {
+        let maxScore = -Infinity;
+        let bestMove = null;
+
+        for (let penguin of player.penguins) {
+            const moves = this.getValidMoves(penguin);
+            for (let targetTile of moves) {
+                let currentScore = 0;
+                if (this.aiDifficulty === 'weak') {
+                    currentScore = targetTile.fishCount + Math.random() * 0.5;
+                } else {
+                    // Normal
+                    const originalTile = penguin.tile;
+                    originalTile.penguin = null;
+                    originalTile.active = false;
+                    targetTile.penguin = penguin;
+                    penguin.tile = targetTile;
+
+                    const myReachable = this.calculateReachableFish(player);
+                    currentScore = myReachable + (targetTile.fishCount * 0.1) + Math.random() * 0.5;
+
+                    penguin.tile = originalTile;
+                    targetTile.penguin = null;
+                    originalTile.active = true;
+                    originalTile.penguin = penguin;
+                }
+
+                if (currentScore > maxScore) {
+                    maxScore = currentScore;
+                    bestMove = { penguin, target: targetTile };
+                }
+            }
+        }
+        return bestMove;
+    }
+
+    getBestMoveAlphaBeta(player, depth, startTime, timeLimit) {
+        let bestScore = -Infinity;
+        let bestMove = null;
+
+        const allMoves = this.getAllMoves(player);
+        if (allMoves.length === 0) return null;
+
+        // Move ordering: try to pick high fish tiles first
+        allMoves.sort((a, b) => b.target.fishCount - a.target.fishCount);
+
+        for (let move of allMoves) {
+            if (Date.now() - startTime > timeLimit) break;
+
+            // Apply
+            const originalTile = move.penguin.tile;
+            const fishGained = originalTile.fishCount;
+            originalTile.penguin = null;
+            originalTile.active = false;
+            move.target.penguin = move.penguin;
+            move.penguin.tile = move.target;
+            player.score += fishGained;
+
+            // Next player
+            const nextPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+            const nextPlayer = this.players[nextPlayerIndex];
+
+            const score = this.alphaBeta(nextPlayer, depth - 1, -Infinity, Infinity, false, player.id, startTime, timeLimit);
+
+            // Undo
+            player.score -= fishGained;
+            move.penguin.tile = originalTile;
+            move.target.penguin = null;
+            originalTile.active = true;
+            originalTile.penguin = move.penguin;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+                bestMove.score = score; // Save score for debugging
+            }
+        }
+        return bestMove;
+    }
+
+    alphaBeta(currentPlayer, depth, alpha, beta, isMaximizingPlayer, maximizingPlayerId, startTime, timeLimit) {
+        if (depth === 0 || Date.now() - startTime > timeLimit) {
+            return this.evaluateBoard(maximizingPlayerId);
+        }
+
+        const allMoves = this.getAllMoves(currentPlayer);
+
+        if (allMoves.length === 0) {
+            // No moves, pass turn (effectively)
+            // In this game, if you have no moves, you are skipped.
+            // So we should recurse with same player? No, next player.
+            // But the game logic says "Eliminate".
+            // For search, we just treat it as "no change in state, next player's turn".
+            // But we need to avoid infinite loops if everyone is stuck.
+            // Let's just evaluate.
+            return this.evaluateBoard(maximizingPlayerId);
+        }
+
+        // Move ordering
+        allMoves.sort((a, b) => b.target.fishCount - a.target.fishCount);
+
+        if (isMaximizingPlayer) {
+            let maxEval = -Infinity;
+            for (let move of allMoves) {
+                // Apply
+                const originalTile = move.penguin.tile;
+                const fishGained = originalTile.fishCount;
+                originalTile.penguin = null;
+                originalTile.active = false;
+                move.target.penguin = move.penguin;
+                move.penguin.tile = move.target;
+                currentPlayer.score += fishGained;
+
+                const nextIdx = (this.players.indexOf(currentPlayer) + 1) % this.players.length;
+                const nextPlayer = this.players[nextIdx];
+
+                // Determine if next player is the maximizing player (us)
+                const nextIsMax = (nextPlayer.id === maximizingPlayerId);
+
+                const evalScore = this.alphaBeta(nextPlayer, depth - 1, alpha, beta, nextIsMax, maximizingPlayerId, startTime, timeLimit);
+                maxEval = Math.max(maxEval, evalScore);
+                alpha = Math.max(alpha, evalScore);
+
+                // Undo
+                currentPlayer.score -= fishGained;
+                move.penguin.tile = originalTile;
+                move.target.penguin = null;
+                originalTile.active = true;
+                originalTile.penguin = move.penguin;
+
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (let move of allMoves) {
+                // Apply
+                const originalTile = move.penguin.tile;
+                const fishGained = originalTile.fishCount;
+                originalTile.penguin = null;
+                originalTile.active = false;
+                move.target.penguin = move.penguin;
+                move.penguin.tile = move.target;
+                currentPlayer.score += fishGained;
+
+                const nextIdx = (this.players.indexOf(currentPlayer) + 1) % this.players.length;
+                const nextPlayer = this.players[nextIdx];
+
+                const nextIsMax = (nextPlayer.id === maximizingPlayerId);
+
+                const evalScore = this.alphaBeta(nextPlayer, depth - 1, alpha, beta, nextIsMax, maximizingPlayerId, startTime, timeLimit);
+                minEval = Math.min(minEval, evalScore);
+                beta = Math.min(beta, evalScore);
+
+                // Undo
+                currentPlayer.score -= fishGained;
+                move.penguin.tile = originalTile;
+                move.target.penguin = null;
+                originalTile.active = true;
+                originalTile.penguin = move.penguin;
+
+                if (beta <= alpha) break;
+            }
+            return minEval;
+        }
+    }
+
+    getAllMoves(player) {
+        const allMoves = [];
+        for (let penguin of player.penguins) {
+            const moves = this.getValidMoves(penguin);
+            moves.forEach(target => allMoves.push({ penguin, target }));
+        }
+        return allMoves;
     }
 
     getValidMoves(penguin) {
@@ -224,173 +375,38 @@ class Game {
         return moves;
     }
 
-    getBestMoveMinimax(player, depth) {
-        // Simple Minimax implementation
-        // For simplicity, we only consider 2 players in Minimax: AI vs "The Rest" (or just next player)
-        // Since it's a multiplayer game, true minimax is complex (MaxN).
-        // We will approximate by assuming the next player tries to minimize OUR score (or maximize theirs).
-        // Let's just look at: Max(My Move) -> Min(Next Player Move) -> Evaluate State
+    evaluateBoard(playerId) {
+        const player = this.players.find(p => p.id === playerId);
 
-        let bestScore = -Infinity;
-        let bestMove = null;
-
-        // Get all my moves
-        const allMoves = [];
-        for (let penguin of player.penguins) {
-            const moves = this.getValidMoves(penguin);
-            moves.forEach(target => allMoves.push({ penguin, target }));
-        }
-
-        if (allMoves.length === 0) return null;
-
-        // Optimization: Sort moves by immediate gain (fish count) to improve pruning (if we had alpha-beta)
-        // For now, just shuffle to add variety if scores are equal
-        allMoves.sort(() => Math.random() - 0.5);
-
-        for (let move of allMoves) {
-            // Apply Move
-            const originalTile = move.penguin.tile;
-            const fishGained = originalTile.fishCount;
-
-            originalTile.penguin = null;
-            originalTile.active = false;
-            move.target.penguin = move.penguin;
-            move.penguin.tile = move.target;
-            player.score += fishGained; // Temporarily add score
-
-            // Recurse
-            // Next player index
-            const nextPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-            const nextPlayer = this.players[nextPlayerIndex];
-
-            // We need to handle the case where next player is eliminated/stuck inside the recursion?
-            // For depth 2, let's just assume next player moves.
-
-            const score = this.minimax(nextPlayer, depth - 1, false, player);
-
-            // Undo Move
-            player.score -= fishGained;
-            move.penguin.tile = originalTile;
-            move.target.penguin = null;
-            originalTile.active = true;
-            originalTile.penguin = move.penguin;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = move;
-            }
-        }
-
-        return bestMove;
-    }
-
-    minimax(currentPlayer, depth, isMaximizingPlayer, maximizingPlayerId) {
-        if (depth === 0) {
-            return this.evaluateBoard(maximizingPlayerId);
-        }
-
-        // Check if game over (no moves for anyone) - expensive to check fully, skip for now
-
-        const allMoves = [];
-        // If player is eliminated/stuck, we should skip them?
-        // For simplicity in this depth=2 check, if current player has no moves, just pass turn (recurse with same depth? or reduce depth?)
-        // Let's just return evaluation if no moves.
-
-        for (let penguin of currentPlayer.penguins) {
-            const moves = this.getValidMoves(penguin);
-            moves.forEach(target => allMoves.push({ penguin, target }));
-        }
-
-        if (allMoves.length === 0) {
-            // No moves for this player. 
-            // If this was the maximizing player, it's bad (unless we are winning).
-            // If it was opponent, good for us.
-            // Let's just evaluate state.
-            return this.evaluateBoard(maximizingPlayerId);
-        }
-
-        if (isMaximizingPlayer) {
-            // Should not happen in Depth 2 (Max -> Min -> End)
-            // But for general support:
-            let maxEval = -Infinity;
-            for (let move of allMoves) {
-                // Apply
-                const originalTile = move.penguin.tile;
-                const fishGained = originalTile.fishCount;
-                originalTile.penguin = null;
-                originalTile.active = false;
-                move.target.penguin = move.penguin;
-                move.penguin.tile = move.target;
-                currentPlayer.score += fishGained;
-
-                const nextIdx = (currentPlayer.id - 1 + 1) % this.players.length; // id is 1-based, array 0-based. logic is messy.
-                // Let's find next player object from array
-                const currentIdx = this.players.indexOf(currentPlayer);
-                const nextPlayer = this.players[(currentIdx + 1) % this.players.length];
-
-                const evalScore = this.minimax(nextPlayer, depth - 1, nextPlayer === maximizingPlayerId, maximizingPlayerId);
-                maxEval = Math.max(maxEval, evalScore);
-
-                // Undo
-                currentPlayer.score -= fishGained;
-                move.penguin.tile = originalTile;
-                move.target.penguin = null;
-                originalTile.active = true;
-                originalTile.penguin = move.penguin;
-            }
-            return maxEval;
-        } else {
-            // Minimizing step (Opponent)
-            // We want to minimize the Maximizing Player's score advantage
-            let minEval = Infinity;
-            for (let move of allMoves) {
-                // Apply
-                const originalTile = move.penguin.tile;
-                const fishGained = originalTile.fishCount;
-                originalTile.penguin = null;
-                originalTile.active = false;
-                move.target.penguin = move.penguin;
-                move.penguin.tile = move.target;
-                currentPlayer.score += fishGained;
-
-                const currentIdx = this.players.indexOf(currentPlayer);
-                const nextPlayer = this.players[(currentIdx + 1) % this.players.length];
-
-                // If next is maximizing player, then isMaximizing=true
-                const evalScore = this.minimax(nextPlayer, depth - 1, nextPlayer === maximizingPlayerId, maximizingPlayerId);
-                minEval = Math.min(minEval, evalScore);
-
-                // Undo
-                currentPlayer.score -= fishGained;
-                move.penguin.tile = originalTile;
-                move.target.penguin = null;
-                originalTile.active = true;
-                originalTile.penguin = move.penguin;
-            }
-            return minEval;
-        }
-    }
-
-    evaluateBoard(player) {
-        // Score difference
+        // 1. Score Difference
         let scoreDiff = player.score;
-        // Subtract max opponent score
         let maxOpponentScore = 0;
+        let opponentReachableSum = 0;
+
         this.players.forEach(p => {
-            if (p !== player) {
+            if (p.id !== playerId) {
                 if (p.score > maxOpponentScore) maxOpponentScore = p.score;
+                opponentReachableSum += this.calculateReachableFish(p);
             }
         });
         scoreDiff -= maxOpponentScore;
 
-        // Reachable fish (Area control)
+        // 2. Reachable Fish (Territory)
         const myReachable = this.calculateReachableFish(player);
 
-        // Opponent reachable (approximate by sum of all opponents? or just max?)
-        // Calculating for all opponents is expensive.
-        // Let's just use My Reachable as a positive factor.
+        // 3. Mobility (Number of moves)
+        const myMobility = this.getAllMoves(player).length;
 
-        return (scoreDiff * 10) + myReachable;
+        // Weights
+        const wScore = 100;
+        const wReachable = 10; // Future score potential
+        const wMobility = 1; // Don't get stuck
+        const wOpponentReachable = -5; // Deny opponent
+
+        return (scoreDiff * wScore) +
+            (myReachable * wReachable) +
+            (myMobility * wMobility) +
+            (opponentReachableSum * wOpponentReachable);
     }
 
     calculateReachableFish(player) {
@@ -650,7 +666,7 @@ class Game {
         turnInd.style.color = getComputedStyle(document.documentElement).getPropertyValue(`--p${currentPlayer.id}-color`);
 
         if (this.phase === 'PLACEMENT') {
-            phaseInd.innerText = 'ペンギンを配置してください';
+            phaseInd.innerText = 'ペンギンを魚が1つのタイルに配置してください';
         } else if (this.phase === 'GAMEPLAY') {
             if (this.selectedPenguin) {
                 phaseInd.innerText = 'ペンギンを動かしてください';
