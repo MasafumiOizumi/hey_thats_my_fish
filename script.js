@@ -735,16 +735,11 @@ class Game {
                 const pEl = document.createElement('div');
                 pEl.className = 'penguin';
                 // Map player color to asset
-                let assetName = 'penguin_red.png';
-                if (tile.penguin.owner.color === 'blue') assetName = 'penguin_blue.png';
-                // Fallback for green/yellow using filters
+                let assetName = `penguin_${tile.penguin.owner.color}.png`;
                 pEl.style.backgroundImage = `url('assets/${assetName}')`;
 
-                if (tile.penguin.owner.color === 'green') {
-                    pEl.style.filter = 'hue-rotate(90deg)'; // Red to Green approx
-                } else if (tile.penguin.owner.color === 'yellow') {
-                    pEl.style.filter = 'hue-rotate(60deg) brightness(1.5)'; // Red to Yellow approx
-                }
+                // Remove filters as we now have specific assets
+                pEl.style.filter = 'none';
 
                 if (this.selectedPenguin === tile.penguin) {
                     el.classList.add('selected');
