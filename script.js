@@ -657,65 +657,87 @@ class Game {
     }
 
     updateUI() {
-        const turnInd = document.getElementById('turn-indicator');
-        const phaseInd = document.getElementById('phase-indicator');
+        const gameInfo = document.getElementById('game-info');
         const scoreBoard = document.getElementById('scoreboard');
 
         const currentPlayer = this.players[this.currentPlayerIndex];
-        turnInd.innerText = `${currentPlayer.name}の番`;
-        turnInd.style.color = getComputedStyle(document.documentElement).getPropertyValue(`--p${currentPlayer.id}-color`);
+        const playerColor = getComputedStyle(document.documentElement).getPropertyValue(`--p${currentPlayer.id}-color`);
 
+        let phaseText = '';
         if (this.phase === 'PLACEMENT') {
-            phaseInd.innerText = 'ペンギンを魚が1つのタイルに配置してください';
+            phaseText = '配置してください';
         } else if (this.phase === 'GAMEPLAY') {
             if (this.selectedPenguin) {
-                phaseInd.innerText = 'ペンギンを動かしてください';
+                phaseText = '移動先を選択';
             } else {
-                phaseInd.innerText = '動かすペンギンを選んでください';
+                phaseText = 'ペンギンを選択';
             }
         } else {
-            phaseInd.innerText = '魚を集めてください！';
+            phaseText = '終了';
         }
 
-        let scoreHtml = '';
+        // Compact single line: [Player Name] : [Instruction]
+        gameInfo.innerHTML = `<span style="color: ${playerColor}; font-weight: bold;">${currentPlayer.name}の番</span> : ${phaseText}`;
+
+        let scoreHtml = '<span>スコア</span>';
         this.players.forEach(p => {
-            scoreHtml += `<div style="color: var(--p${p.id}-color)">${p.name}: ${p.score}</div>`;
+            scoreHtml += `<span style="color: var(--p${p.id}-color); margin-left: 10px;">${p.name}: ${p.score}</span>`;
         });
         scoreBoard.innerHTML = scoreHtml;
     }
 
     render() {
         const boardEl = document.getElementById('game-board');
-        boardEl.innerHTML = ''; // Clear (inefficient but simple for now)
+        boardEl.innerHTML = '';
 
-        // Render tiles
+        // 1. Calculate bounds to determine board size and offsets
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        this.board.tiles.forEach(tile => {
+            if (!tile.active) return;
+            // Axial to pixel (Pointy topped)
+            const x = TILE_SIZE * Math.sqrt(3) * (tile.q + tile.r / 2);
+            const y = TILE_SIZE * 3 / 2 * tile.r;
+
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        });
+
+        // Add padding for tile size (approx half width/height)
+        const paddingX = HEX_WIDTH / 2;
+        const paddingY = HEX_HEIGHT / 2;
+
+        // Set board container size
+        const boardWidth = (maxX - minX) + HEX_WIDTH + 20; // +20 for safety
+        const boardHeight = (maxY - minY) + HEX_HEIGHT + 20;
+
+        boardEl.style.width = `${boardWidth}px`;
+        boardEl.style.height = `${boardHeight}px`;
+        boardEl.style.position = 'relative'; // Ensure it holds absolute children
+
+        // Sync UI layer width to board width for alignment
+        const uiLayer = document.getElementById('ui-layer');
+        if (uiLayer) {
+            uiLayer.style.width = `${boardWidth}px`;
+            uiLayer.style.margin = '0 auto'; // Center it
+        }
+
+        // 2. Render tiles
         this.board.tiles.forEach(tile => {
             if (!tile.active) return;
 
             const el = document.createElement('div');
             el.className = 'hex-tile';
 
-            // Calculate pixel position
-            // Axial to pixel:
-            // x = size * (3/2 * q)
-            // y = size * (sqrt(3)/2 * q + sqrt(3) * r)
-            // But we want "pointy topped" or "flat topped"?
-            // Image shows pointy topped.
-            // Pointy topped:
-            // x = size * sqrt(3) * (q + r/2)
-            // y = size * 3/2 * r
-
-            // Let's use the offsets defined at top
-            // Using "odd-r" offset coordinates for storage, but axial for math is easier.
-            // Let's stick to the Board.generate logic which will likely use offset coords.
-            // Let's assume tile.q and tile.r are Axial coordinates.
-
-            // Pointy topped hexes
             const x = TILE_SIZE * Math.sqrt(3) * (tile.q + tile.r / 2);
             const y = TILE_SIZE * 3 / 2 * tile.r;
 
-            el.style.left = `${x + 400}px`; // Center offset
-            el.style.top = `${y + 100}px`;
+            // Shift positions to be relative to minX/minY (plus padding)
+            el.style.left = `${x - minX + 10}px`;
+            el.style.top = `${y - minY + 10}px`;
 
             // Set background image based on fish count
             el.style.backgroundImage = `url('assets/tile${tile.fishCount}.png')`;
@@ -737,8 +759,6 @@ class Game {
                 // Map player color to asset
                 let assetName = `penguin_${tile.penguin.owner.color}.png`;
                 pEl.style.backgroundImage = `url('assets/${assetName}')`;
-
-                // Remove filters as we now have specific assets
                 pEl.style.filter = 'none';
 
                 if (this.selectedPenguin === tile.penguin) {

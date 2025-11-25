@@ -30,77 +30,75 @@ body {
 
 #game-info {
     background: rgba(15, 23, 42, 0.9);
-    padding: 20px;
-    border-radius: 12px;
+    padding: 5px 15px;
+    border-radius: 8px;
     backdrop-filter: blur(5px);
     border: 2px solid var(--accent-color);
-    /* Blue border */
     pointer-events: auto;
-    width: 100%;
     box-sizing: border-box;
-    margin-bottom: 20px;
-    /* Increased margin */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    font-size: 1.5rem;
-    /* Bigger font */
+    margin-bottom: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    font-size: 1rem;
+    flex: 1;
+    /* Equal width */
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #scoreboard {
     background: rgba(15, 23, 42, 0.9);
-    padding: 20px;
-    border-radius: 12px;
+    padding: 5px 15px;
+    border-radius: 8px;
     backdrop-filter: blur(5px);
     border: 2px solid var(--p4-color);
-    /* Yellow border */
     pointer-events: auto;
-    width: 100%;
     box-sizing: border-box;
-    margin-bottom: 20px;
-    /* Increased margin */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-}
-
-#scoreboard {
-    font-size: 1.8rem;
-    /* Even bigger for scores */
+    margin-bottom: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    font-size: 1rem;
     font-weight: 600;
+    flex: 1;
+    /* Equal width */
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
 }
 
 #scoreboard::before {
-    content: "スコア";
-    display: block;
-    font-size: 1.4rem;
-    color: var(--accent-color);
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    padding-bottom: 5px;
+    display: none;
 }
 
 #turn-indicator {
-    font-size: 1.8rem;
+    font-size: 1rem;
     font-weight: 600;
-    margin-bottom: 10px;
+    margin-bottom: 0;
+    margin-right: 10px;
 }
 
 #controls {
-    width: 100%;
+    width: auto;
     pointer-events: auto;
 }
 
 #reset-btn {
-    width: 100%;
+    width: auto;
     margin-top: 0;
-    font-size: 1.5rem;
-    padding: 15px;
+    font-size: 1rem;
+    padding: 5px 15px;
 }
 
 #game-container {
     width: 100vw;
     height: 100vh;
     display: flex;
-    flex-direction: row;
-    /* Side by side */
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
     justify-content: flex-start;
     position: relative;
     overflow: hidden;
@@ -108,43 +106,33 @@ body {
 
 #ui-layer {
     position: relative;
-    /* Part of flow */
-    top: auto;
-    left: auto;
-    bottom: auto;
-    width: 300px;
-    /* Fixed width for UI column */
-    height: 100vh;
+    width: 100%;
+    height: auto;
     display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
     gap: 0;
-    padding: 20px;
+    padding: 10px;
     box-sizing: border-box;
     pointer-events: none;
     z-index: 10;
     background: rgba(0, 0, 0, 0.2);
-    /* Optional: slight dim for UI area? No, keep transparent */
 }
 
 #board-container {
     flex: 1;
-    /* Take remaining width */
-    height: 100%;
+    width: 100%;
     display: flex;
-    justify-content: flex-start;
-    /* Align board to left, next to UI */
-    align-items: flex-start;
-    /* Align to top to remove top space */
-    overflow: auto;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    /* Changed from auto to hidden to prevent scrollbars if possible */
     background-color: var(--water-color);
     background-image: radial-gradient(#334155 1px, transparent 1px);
     background-size: 20px 20px;
     perspective: 1000px;
-    padding-left: 0;
-    /* Remove extra padding */
-    padding-top: 20px;
-    /* Small top padding */
+    padding: 0;
 }
 
 #game-board {
